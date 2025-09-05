@@ -1,4 +1,4 @@
-import ccxt from "ccxt";
+import * as ccxt from "ccxt";
 import { log } from "./logger";
 
 export const mexc = new ccxt.mexc({
@@ -27,8 +27,9 @@ export async function initExchanges() {
  */
 export function findPerpSymbol(ex: ccxt.Exchange, base: string): string | undefined {
   for (const m of Object.values(ex.markets)) {
+    if (!m) continue;
     const mk = m as ccxt.Market;
-    if (mk.swap && mk.contract && mk.settle === "USDT" && mk.base === base) {
+    if (mk && mk.swap && mk.contract && mk.settle === "USDT" && mk.base === base) {
       return mk.symbol; // ex.: "BTC/USDT:USDT"
     }
   }
