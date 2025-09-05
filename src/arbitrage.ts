@@ -62,12 +62,18 @@ function entryCostPct(scenario: Scenario): number {
 
 export async function checkSymbol(baseSpot: string) {
   const base = baseSpot.split("/")[0]; // "BTC" em "BTC/USDT"
+  
+  log("debug", "🔍 Iniciando verificação de arbitragem", { base });
 
   // resolve símbolos
   const mexcSpot = `${base}/USDT`;
   const gateSpot = `${base}/USDT`;
   const mexcPerp = findPerpSymbol(mexc, base);
   const gatePerp = findPerpSymbol(gate, base);
+  
+  log("debug", "📋 Símbolos resolvidos", { 
+    mexcSpot, gateSpot, mexcPerp, gatePerp 
+  });
 
   if (!mexcPerp || !gatePerp) {
     log("warn", "Perp não encontrado para base", { base, mexcPerp, gatePerp });
@@ -75,12 +81,22 @@ export async function checkSymbol(baseSpot: string) {
   }
 
   // Preços necessários
+  log("debug", "💰 Buscando preços nos order books...", { base });
+  
   const [mexcPerpBid, gatePerpBid, mexcSpotAsk, gateSpotAsk] = await Promise.all([
     fetchBestBid(mexc, mexcPerp),
     fetchBestBid(gate, gatePerp),
     fetchBestAsk(mexc, mexcSpot),
     fetchBestAsk(gate, gateSpot)
   ]);
+  
+  log("debug", "📊 Preços obtidos", {
+    base,
+    mexcPerpBid: mexcPerpBid?.toFixed(4),
+    gatePerpBid: gatePerpBid?.toFixed(4),
+    mexcSpotAsk: mexcSpotAsk?.toFixed(4),
+    gateSpotAsk: gateSpotAsk?.toFixed(4)
+  });
 
   if (![mexcPerpBid, gatePerpBid, mexcSpotAsk, gateSpotAsk].every(Number.isFinite)) {
     log("warn", "Falha ao obter book", { base, mexcPerpBid, gatePerpBid, mexcSpotAsk, gateSpotAsk });
@@ -88,15 +104,35 @@ export async function checkSymbol(baseSpot: string) {
   }
 
   // Funding no lado curto (preferimos dados da exchange; senão, heurística pelo basis)
+  log("debug", "⚡ Calculando funding rates e basis...", { base });
+  
   // Cenário A: short perp MEXC, long spot Gate
   let fundingShortMexc = await tryFunding8h(mexc, mexcPerp, "mexc");
   const basisA = (mexcPerpBid! - gateSpotAsk!) / gateSpotAsk!;
   if (!fundingShortMexc) fundingShortMexc = fundingHeuristicFromBasis("mexc", mexcPerp, basisA);
+  
+  log("debug", "📈 Cenário A (Short MEXC Perp + Long Gate Spot)", {
+    base,
+    mexcPerpBid: mexcPerpBid!.toFixed(4),
+    gateSpotAsk: gateSpotAsk!.toFixed(4),
+    basisPct: (basisA * 100).toFixed(4) + '%',
+    fundingRate8h: fundingShortMexc.rate8hPct ? (fundingShortMexc.rate8hPct * 100).toFixed(4) + '%' : 'N/A',
+    fundingSource: fundingShortMexc.source
+  });
 
   // Cenário B: short perp GATE, long spot MEXC
   let fundingShortGate = await tryFunding8h(gate, gatePerp, "gate");
   const basisB = (gatePerpBid! - mexcSpotAsk!) / mexcSpotAsk!;
   if (!fundingShortGate) fundingShortGate = fundingHeuristicFromBasis("gate", gatePerp, basisB);
+  
+  log("debug", "📈 Cenário B (Short Gate Perp + Long MEXC Spot)", {
+    base,
+    gatePerpBid: gatePerpBid!.toFixed(4),
+    mexcSpotAsk: mexcSpotAsk!.toFixed(4),
+    basisPct: (basisB * 100).toFixed(4) + '%',
+    fundingRate8h: fundingShortGate.rate8hPct ? (fundingShortGate.rate8hPct * 100).toFixed(4) + '%' : 'N/A',
+    fundingSource: fundingShortGate.source
+  });
 
   // Monta oportunidades se baterem os limiares
   const scenarios: Array<{scenario: Scenario, spotExchange: "mexc"|"gate", perpExchange: "mexc"|"gate",
@@ -107,12 +143,29 @@ export async function checkSymbol(baseSpot: string) {
       spotAsk: mexcSpotAsk!, perpBid: gatePerpBid!, basisPct: basisB, shortFunding: fundingShortGate },
   ];
 
+  log("debug", "🎯 Avaliando oportunidades contra critérios", {
+    base,
+    minBasisPct: (CFG.minBasisPct * 100).toFixed(4) + '%',
+    minFunding8hPct: (CFG.minFunding8hPct * 100).toFixed(4) + '%'
+  });
+
   for (const s of scenarios) {
     const cost = entryCostPct(s.scenario);
     const netBasis = s.basisPct - cost;
 
     const basisOK = netBasis >= CFG.minBasisPct;
     const fundingOK = (s.shortFunding.rate8hPct ?? 0) >= CFG.minFunding8hPct;
+    
+    log("debug", `🔍 Avaliando ${s.scenario}`, {
+      base,
+      basisPct: (s.basisPct * 100).toFixed(4) + '%',
+      estEntryCostPct: (cost * 100).toFixed(4) + '%',
+      netBasisPct: (netBasis * 100).toFixed(4) + '%',
+      shortFunding8hPct: s.shortFunding.rate8hPct ? (s.shortFunding.rate8hPct * 100).toFixed(4) + '%' : 'N/A',
+      basisOK: basisOK ? '✅' : '❌',
+      fundingOK: fundingOK ? '✅' : '❌',
+      qualifica: (basisOK || fundingOK) ? '🎉 SIM' : '❌ NÃO'
+    });
 
     if (basisOK || fundingOK) {
       const op: Opportunity = {
@@ -132,15 +185,9 @@ export async function checkSymbol(baseSpot: string) {
         ruleTriggered: basisOK && fundingOK ? "both" : (basisOK ? "basis" : "funding")
       };
       writeOpportunity(op);
-      log("info", "OPORTUNIDADE", op);
-    } else {
-      log("debug", "Sem oportunidade", {
-        base,
-        basisPct: s.basisPct,
-        estEntryCostPct: cost,
-        netBasisPct: netBasis,
-        shortFunding8hPct: s.shortFunding.rate8hPct
-      });
+      log("info", "🚀 OPORTUNIDADE ENCONTRADA!", op);
     }
   }
+  
+  log("debug", "✅ Verificação concluída", { base });
 }
