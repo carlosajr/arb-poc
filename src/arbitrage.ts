@@ -2,18 +2,8 @@ import { gate, mexc, findPerpSymbol } from "./exchanges";
 import type { Opportunity, Scenario, FundingSnapshot } from "./types";
 import { CFG } from "./config";
 import { log } from "./logger";
-import fs from "fs";
-import path from "path";
-import dayjs from "dayjs";
 import { safeNumber } from "./utils";
-
-/** arquivo JSONL diário de oportunidades */
-function opportunitiesPath() {
-  const dir = path.join(process.cwd(), "data");
-  fs.mkdirSync(dir, { recursive: true });
-  const date = dayjs().format("YYYY-MM-DD");
-  return path.join(dir, `opportunities-${date}.jsonl`);
-}
+import { publishOpportunity } from "./opportunitySink";
 
 async function fetchBestAsk(exchange: any, symbol: string): Promise<number | undefined> {
   const ob = await exchange.fetchOrderBook(symbol, 5);
@@ -45,11 +35,6 @@ function fundingHeuristicFromBasis(exchange: "mexc" | "gate", perpSymbol: string
   // magnitude conservadora: 1/5 do basis (cap em ±0.02%/8h)
   const est = Math.max(-0.0002, Math.min(0.0002, basisPct / 5));
   return { exchange, symbol: perpSymbol, rate8hPct: est, source: "basisHeuristic" };
-}
-
-function writeOpportunity(op: Opportunity) {
-  const line = JSON.stringify(op);
-  fs.appendFileSync(opportunitiesPath(), line + "\n");
 }
 
 function entryCostPct(scenario: Scenario): number {
@@ -184,7 +169,7 @@ export async function checkSymbol(baseSpot: string) {
         shortFunding: s.shortFunding,
         ruleTriggered: basisOK && fundingOK ? "both" : (basisOK ? "basis" : "funding")
       };
-      writeOpportunity(op);
+      publishOpportunity(op);
       log("info", "🚀 OPORTUNIDADE ENCONTRADA!", op);
     }
   }

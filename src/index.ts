@@ -1,34 +1,26 @@
-import { CFG } from "./config";
-import { initExchanges } from "./exchanges";
-import { checkSymbol } from "./arbitrage";
+import { MODE } from "./config";
+import { MarginArbScanner } from "./marginScanner";
+import { FundingRateScanner } from "./fundingScanner";
 import { log } from "./logger";
+import { startLogServer } from "./server";
 
 async function main() {
-  await initExchanges();
-  log("info", "Iniciando loop", { symbols: CFG.symbols, pollMs: CFG.pollMs });
+  const mode = MODE;
+  log("info", "Iniciando aplicação", { mode });
 
-  setInterval(async () => {
-    log("debug", "🔄 Iniciando novo ciclo de verificação", { 
-      symbols: CFG.symbols, 
-      timestamp: new Date().toISOString() 
-    });
-    
-    for (const s of CFG.symbols) {
-      try {
-        await checkSymbol(s);
-      } catch (e: any) {
-        log("error", "Erro ao checar símbolo", { symbol: s, err: e?.message });
-      }
-    }
-    
-    log("debug", "✅ Ciclo de verificação concluído", { 
-      symbols: CFG.symbols.length,
-      nextCheck: new Date(Date.now() + CFG.pollMs).toISOString()
-    });
-  }, CFG.pollMs);
+  startLogServer();
+
+  if (mode === "funding") {
+    const scanner = new FundingRateScanner();
+    await scanner.start();
+  } else {
+    const scanner = new MarginArbScanner();
+    await scanner.start();
+  }
 }
 
 main().catch(err => {
   log("error", "Fatal init error", { err: String(err) });
   process.exit(1);
 });
+
