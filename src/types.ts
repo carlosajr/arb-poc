@@ -26,3 +26,25 @@ export interface Opportunity {
   shortFunding?: FundingSnapshot;
   ruleTriggered: "basis" | "funding" | "both";
 }
+
+export interface FundingRateSnapshot {
+  exchange: "mexc" | "gate";
+  symbol: string;
+  rate: number;          // fração por janela (ex.: 0.0001)
+  collectHours: number;
+  nextFundingTime?: number;
+}
+
+export interface FundingRateOpportunity {
+  kind: "funding";
+  ts: number;
+  symbol: string; // ex.: BTC_USDT
+  snapshots: { mexc: FundingRateSnapshot; gate: FundingRateSnapshot };
+  chosenShortPerp: "mexc" | "gate";
+  theoreticalLongSpot: "mexc" | "gate";
+  fundingBps: number;
+  pnlPorJanela: number;
+  pnlPorDia: number;
+  aprAprox: number;
+  params: { notional: number; minBps: number; safetyBps: number };
+}
