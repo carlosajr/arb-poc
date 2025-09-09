@@ -6,12 +6,15 @@ import { computeNetSpread } from './marginUtils';
 import { Opportunity } from './types';
 
 export async function checkSymbol(symbol: string) {
-  log('debug', '🔍 Iniciando verificação de arbitragem', { symbol });
-  const mexc = await fetchMexcTicker(symbol);
-  const btcc = await fetchBtccTicker(symbol);
+  const mexcSymbol = symbol.replace(/[\/_]/g, '');
+  const btccSymbol = symbol.replace('/', '_');
+
+  log('debug', '🔍 Iniciando verificação de arbitragem', { symbol, mexcSymbol, btccSymbol });
+  const mexc = await fetchMexcTicker(mexcSymbol);
+  const btcc = await fetchBtccTicker(btccSymbol);
 
   if (!mexc || !btcc) {
-    log('warn', 'Ticker indisponível em alguma exchange', { symbol });
+    log('warn', 'Ticker indisponível em alguma exchange', { symbol, mexcSymbol, btccSymbol });
     return;
   }
 

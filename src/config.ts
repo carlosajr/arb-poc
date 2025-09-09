@@ -9,7 +9,7 @@ function n(name: string, def: number): number {
 
 const symbolsEnv = (process.env.SYMBOLS || 'FLOCK_USDT')
   .split(',')
-  .map(s => s.trim().replace(/[\/_]/g, ''));
+  .map(s => s.trim().toUpperCase());
 
 export const CFG = {
   symbols: symbolsEnv,
