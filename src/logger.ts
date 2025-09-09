@@ -6,23 +6,25 @@ import dayjs from "dayjs";
 const logsDir = path.join(process.cwd(), "logs");
 fs.mkdirSync(logsDir, { recursive: true });
 
-const date = dayjs().format("YYYY-MM-DD");
-const filePath = path.join(logsDir, `app-${date}.log`);
+const filePath = path.join(logsDir, "app.log");
+const timeFmt = "DDMMYYYY HH:mm:ss:SSS";
+
+const timestamp = () => `,"time":"${dayjs().format(timeFmt)}"`;
 
 export const consoleLogger = pino({
   level: process.env.LOG_LEVEL || "info",
+  timestamp,
   transport: {
     target: "pino-pretty",
     options: {
       colorize: true,
-      translateTime: "SYS:standard",
       ignore: "pid,hostname"
     }
   }
 });
 
 export const fileLogger = pino(
-  { level: process.env.LOG_LEVEL || "info" },
+  { level: process.env.LOG_LEVEL || "info", timestamp },
   pino.destination({ dest: filePath, sync: false })
 );
 
