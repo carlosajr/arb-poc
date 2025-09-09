@@ -3,3 +3,5 @@ node_modules
 dist
 logs
 data
+.yarn
+.yarnrc.yml
