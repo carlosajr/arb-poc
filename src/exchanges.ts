@@ -21,7 +21,8 @@ export async function fetchMexcTicker(symbol: string): Promise<Ticker | undefine
 }
 
 export async function fetchBtccTicker(symbol: string): Promise<Ticker | undefined> {
-  const url = `https://api.btcc.com/api/market/ticker?symbol=${symbol}`;
+  // BTCC expõe o ticker público via domínio principal
+  const url = `https://www.btcc.com/api/market/ticker?symbol=${symbol}`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`status ${res.status}`);
