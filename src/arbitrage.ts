@@ -11,10 +11,22 @@ export async function checkSymbol(symbol: string) {
 
   log('debug', '🔍 Iniciando verificação de arbitragem', { symbol, mexcSymbol, btccSymbol });
   const mexc = await fetchMexcTicker(mexcSymbol);
+  if (!mexc) {
+    log('error', 'Ticker da MEXC indisponível', { symbol, mexcSymbol });
+  }
   const btcc = await fetchBtccTicker(btccSymbol);
+  if (!btcc) {
+    log('error', 'Ticker da BTCC indisponível', { symbol, btccSymbol });
+  }
 
   if (!mexc || !btcc) {
-    log('warn', 'Ticker indisponível em alguma exchange', { symbol, mexcSymbol, btccSymbol });
+    log('warn', 'Ticker indisponível em alguma exchange', {
+      symbol,
+      mexcSymbol,
+      btccSymbol,
+      mexcOk: !!mexc,
+      btccOk: !!btcc
+    });
     return;
   }
 
