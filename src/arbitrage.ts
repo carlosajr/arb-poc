@@ -1,4 +1,4 @@
-import { fetchMexcTicker, fetchBtccTicker } from './exchanges';
+import { fetchMexcTicker, fetchBtccTicker, btccWsBackoffActive } from './exchanges';
 import { CFG } from './config';
 import { log } from './logger';
 import { publishOpportunity } from './opportunitySink';
@@ -6,6 +6,11 @@ import { computeNetSpread } from './marginUtils';
 import { Opportunity } from './types';
 
 export async function checkSymbol(symbol: string) {
+  if (btccWsBackoffActive()) {
+    log('warn', 'BTCC WS em backoff após 403; pulando símbolo', { symbol });
+    return;
+  }
+
   const mexcSymbol = symbol.replace(/[\/_]/g, '');
   const btccSymbol = symbol.replace('/', '_');
 

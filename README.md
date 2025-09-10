@@ -1,40 +1,44 @@
-# Arbitrage PoC (MEXC + Gate.io) — Spot–Perp
+# Arbitrage PoC (MEXC + BTCC)
 
-**Objetivo:** observar basis (perp vs spot) e funding estimado para identificar oportunidades (sem enviar ordens).  
-**Logs:** console (pino-pretty) e arquivo em `logs/app-YYYY-MM-DD.log`.  
-**Persistência de oportunidades:** JSONL diário em `data/opportunities-YYYY-MM-DD.jsonl`.
+Scanner de arbitragem de margem entre as exchanges **MEXC** e **BTCC**. O projeto apenas
+observa preços e taxas de funding; não envia ordens.
 
 ## Requisitos
-- Node.js >= 18.17
-- Yarn (ou npm/pnpm)
+
+- Node.js >= 18
+- Yarn ou npm
 
 ## Instalação
+
 ```bash
 yarn
 cp .env.example .env
-# ajuste taxas, thresholds e símbolos no .env
+# ajuste taxas, símbolos e credenciais no .env
 yarn dev
 ```
 
 ## Como funciona
-- Para cada `SYMBOLS` (ex.: `BTC/USDT,ETH/USDT`):
-  - Busca **spot ask** na exchange do lado "long spot" e **perp bid** na exchange do lado "short perp".
-  - Calcula `basisPct = (perpBid - spotAsk)/spotAsk`.
-  - Estima **custo de entrada** (taxas + slippage) e `netBasisPct = basisPct - custo`.
-  - Tenta obter `fundingRate` por 8h via `fetchFundingRate`. Se indisponível, faz **heurística** com base no basis (conservadora).
-  - Registra oportunidade se `netBasisPct >= MIN_BASIS_PCT` **ou** `fundingShort >= MIN_FUNDING_8H_PCT`.
 
-## Saídas
-- `logs/app-YYYY-MM-DD.log` — tudo que aparece no console também vai para arquivo.
-- `data/opportunities-YYYY-MM-DD.jsonl` — cada linha é um JSON `Opportunity`.
+Para cada símbolo configurado (`SYMBOLS`), o scanner coleta o topo do book nas duas
+exchanges, calcula o spread líquido (considerando taxas e slippage) e registra
+oportunidades quando o spread mínimo é atingido. Os logs são gravados em `logs/app.log` e
+também servidos via HTTP pelo servidor embutido.
 
-## Observações
-- A PoC usa somente **endpoints públicos** (não envia ordens). Coloque API keys se quiser aumentar *rate limits*.
-- O **símbolo perp** é resolvido automaticamente (swap USDT-settled). Confira se sua conta tem acesso aos pares.
-- Funding **varia** por exchange; o CCXT cobre boa parte, mas há **fallback** via heurística se não disponível.
+### BTCC WebSocket
 
-## Próximos passos
-- Adicionar **execução hedgeada** (IOC/FOK) com controle de margem.
-- Medir **desvio vs. mark price** do perp (além do bid).
-- Persistir em SQLite/Postgres para dashboards/time-series.
-- Incluir **Perp–Perp** (long x short) para arbitrar funding cruzado.
+- A conexão WebSocket deve incluir `Origin: https://www.btcc.com` e um `User-Agent` de
+  navegador.
+- É obrigatório fornecer as variáveis `BTCC_WS_NAME` e `BTCC_WS_KEY`.
+- As API keys da BTCC podem ter **IP binding**; verifique se o IP do servidor está na
+  whitelist caso receba respostas 403.
+
+## Logs
+
+Um servidor Express expõe o conteúdo da pasta `logs`. Acesse `http://localhost:3000/`
+para listar os arquivos de log e visualizar seu conteúdo no navegador.
+
+## Avisos
+
+Esta PoC utiliza apenas endpoints públicos e serve apenas para fins de estudo. Não há
+execução de ordens ou chamadas privadas.
+

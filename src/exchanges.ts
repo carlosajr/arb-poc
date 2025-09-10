@@ -30,6 +30,11 @@ const BTCC_WS_NAME = process.env.BTCC_WS_NAME || '';
 const BTCC_WS_KEY = process.env.BTCC_WS_KEY || '';
 const CLIENT_TYPE = 1;
 
+let btcc403Until = 0;
+export function btccWsBackoffActive() {
+  return Date.now() < btcc403Until;
+}
+
 function normalizeSymbol(sym: string) {
   return sym.replace(/[^A-Z0-9]/gi, '').replace(/W$/i, '').toUpperCase();
 }
@@ -43,7 +48,22 @@ export async function fetchBtccTicker(
   const timeoutMs = opts?.timeoutMs ?? 5000;
   const wanted = normalizeSymbol(symbol);
 
-  const ws = new WebSocket(BTCC_WS_URL);
+  if (!BTCC_WS_NAME || !BTCC_WS_KEY) {
+    log('warn', 'BTCC WS sem credenciais (BTCC_WS_NAME/BTCC_WS_KEY). Retornando undefined.', { symbol });
+    return undefined;
+  }
+
+  if (btccWsBackoffActive()) {
+    log('warn', 'BTCC WS em backoff após 403', { symbol, nextTry: new Date(btcc403Until).toISOString() });
+    return undefined;
+  }
+
+  const ws = new WebSocket(BTCC_WS_URL, {
+    headers: {
+      Origin: 'https://www.btcc.com',
+      'User-Agent': 'Mozilla/5.0'
+    }
+  });
 
   let done = false;
   let timer: NodeJS.Timeout | undefined;
@@ -67,11 +87,20 @@ export async function fetchBtccTicker(
       finish(undefined).then(resolve);
     }, timeoutMs);
 
+    (ws as any).on('upgrade', (res: any) => {
+      try {
+        log('info', 'BTCC WS upgrade', {
+          statusCode: res?.statusCode,
+          server: res?.headers?.server,
+          cfRay: res?.headers?.['cf-ray']
+        });
+        if (res?.statusCode === 403) btcc403Until = Date.now() + 30000;
+      } catch {}
+    });
+
     ws.on('open', () => {
-      if (BTCC_WS_NAME && BTCC_WS_KEY) {
-        const login = { name: BTCC_WS_NAME, clienttype: CLIENT_TYPE, key: BTCC_WS_KEY };
-        ws.send(JSON.stringify(login));
-      }
+      const login = { name: BTCC_WS_NAME, clienttype: CLIENT_TYPE, key: BTCC_WS_KEY };
+      ws.send(JSON.stringify(login));
     });
 
     ws.on('message', (raw: any) => {
@@ -121,7 +150,13 @@ export async function fetchBtccTicker(
     });
 
     ws.on('error', (err: any) => {
-      log('error', 'Erro no socket da BTCC', { symbol: wanted, err: (err as any)?.message });
+      const msg = (err as any)?.message || '';
+      if (msg.includes('403')) {
+        btcc403Until = Date.now() + 30000;
+        log('error', 'BTCC WS handshake 403 - verificar Origin header, API keys habilitadas e IP whitelisted nas chaves', { symbol: wanted });
+      } else {
+        log('error', 'Erro no socket da BTCC', { symbol: wanted, err: msg });
+      }
       finish(undefined).then(resolve);
     });
 
